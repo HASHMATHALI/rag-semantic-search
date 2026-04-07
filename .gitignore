@@ -1,0 +1,28 @@
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Python caching
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Models and Large Files (DO NOT PUSH TO GITHUB)
+models/faiss.index
+models/embeddings.npy
+models/metadata.pkl
+*.pkl
+*.npy
+*.index
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+# OS Files
+.DS_Store
+Thumbs.db
