@@ -29,17 +29,24 @@ graph TD
 
 ## 🚀 Setup & Execution
 
-### 1. Vector Pipeline (Offline Loading Layer)
-We intentionally offload the processing to a free Google Colab instance so laptops don't freeze over large scale datasets.
-1. Read `colab/COLAB_INSTRUCTIONS.md` and run the blocks in Colab.
-2. Download the resulting `faiss.index`, `embeddings.npy`, and `metadata.pkl`.
-3. Drop them strictly into the `models/` directory in this engine.
+### 1. Build the vector index
+The index files are not stored in git. Build them once:
+
+```bash
+cd backend/
+pip install -r requirements.txt
+python build_index.py                  # bundled 36-document sample corpus (a few seconds)
+python build_index.py --ag-news 25000  # full AG News demo (needs `pip install datasets`)
+python build_index.py --file docs.txt  # your own corpus, one document per line
+```
+
+For very large corpora you can instead run the notebook-style pipeline in `colab/` on a free
+Colab instance and copy `faiss.index`, `embeddings.npy` and `metadata.pkl` into `models/`.
 
 ### 2. Start the Backend API (FastAPI)
 The backend loads the entire vector database into RAM.
 ```bash
 cd backend/
-pip install -r requirements.txt
 python -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 *(Optional RAG)*: Before launching, set your API key environment variable in Powershell:
@@ -51,6 +58,7 @@ cd frontend/
 pip install -r requirements.txt
 python -m streamlit run app.py
 ```
+The UI talks to `http://localhost:8000/search` by default; set `BACKEND_URL` to point it elsewhere.
 
 ## 🛠️ Technology Stack
 * **Vector DB Engine:** FAISS (`IndexFlatL2`)

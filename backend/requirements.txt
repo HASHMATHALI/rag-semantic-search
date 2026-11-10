@@ -1,7 +1,6 @@
-fastapi
-uvicorn
-sentence-transformers
-faiss-cpu
-numpy
-pandas
-openai
+fastapi>=0.110
+uvicorn>=0.29
+sentence-transformers>=3.0
+faiss-cpu>=1.8
+numpy>=1.26
+openai>=1.0

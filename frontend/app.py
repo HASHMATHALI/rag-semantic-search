@@ -1,3 +1,6 @@
+import html
+import os
+
 import streamlit as st
 import requests
 
@@ -90,7 +93,7 @@ with st.sidebar:
     st.header("⚙️ Search Engine Settings")
     top_k = st.slider("Documents to Retrieve", min_value=1, max_value=20, value=5)
     use_rag = st.checkbox("Generate Answer (RAG)", value=False, help="Requires GROQ_API_KEY running on backend")
-    api_url = st.text_input("Backend URL", value="http://localhost:8002/search")
+    api_url = st.text_input("Backend URL", value=os.environ.get("BACKEND_URL", "http://localhost:8000/search"))
     
     st.markdown("---")
     st.markdown("**Status:** Vectors loaded in RAM")
@@ -98,24 +101,26 @@ with st.sidebar:
 # Main search bar
 query = st.text_input("Enter your query:", placeholder="e.g. Technology advancements in autonomous vehicles...", label_visibility="collapsed")
 
-if st.button("Search Database", type="primary", use_container_width=True) or query:
+if st.button("Search Database", type="primary", width="stretch") or query:
     if not query.strip():
         st.warning("Please enter a query.")
     else:
-        with st.spinner("🚀 Searching millions of vectors instantly..."):
+        with st.spinner("🚀 Searching the vector index..."):
             try:
                 payload = {
                     "query": query,
                     "top_k": top_k,
                     "use_rag": use_rag
                 }
-                response = requests.post(api_url, json=payload)
+                response = requests.post(api_url, json=payload, timeout=60)
                 if response.status_code == 200:
                     st.session_state.search_results = response.json()
                 else:
                     st.error(f"Backend Error {response.status_code}: {response.text}")
             except requests.exceptions.ConnectionError:
-                st.error("🚨 Could not connect to the Backend! Verify FastAPI is running on port 8000.")
+                st.error(f"🚨 Could not connect to the backend at {api_url}. Is FastAPI running?")
+            except requests.exceptions.RequestException as exc:
+                st.error(f"Request failed: {exc}")
 
 # Display results
 if st.session_state.search_results:
@@ -123,19 +128,20 @@ if st.session_state.search_results:
     
     if data.get("rag_response"):
         st.markdown("### 🤖 Synthesized Answer (RAG)")
-        st.markdown(f'<div class="rag-box">{data["rag_response"]}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="rag-box">{html.escape(data["rag_response"])}</div>', unsafe_allow_html=True)
     elif use_rag:
         st.markdown("### 🤖 Synthesized Answer (RAG)")
-        st.markdown(f'<div class="rag-box" style="border-left-color: #888;">RAG was requested but no response generated. Have you set the OpenAI key on the backend?</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="rag-box" style="border-left-color: #888;">RAG was requested but no response generated. Is GROQ_API_KEY set on the backend?</div>', unsafe_allow_html=True)
 
-    st.markdown(f"### 📂 Retrieved Contexts for: *{data['query']}*")
+    st.markdown("### 📂 Retrieved Contexts")
+    st.caption(f"Query: {data['query']}")
     for res in data["results"]:
         st.markdown(f"""
         <div class="result-card">
             <div style="display: flex; justify-content: space-between; margin-bottom: 12px; align-items: center;">
-                <span style="color: #FF6B6B; font-weight: 600; font-size: 0.9rem;">DOCUMENT ID: {res['id']}</span>
+                <span style="color: #FF6B6B; font-weight: 600; font-size: 0.9rem;">DOCUMENT ID: {int(res['id'])}</span>
                 <span class="score-badge">L2 DISTANCE: {res['score']:.4f}</span>
             </div>
-            <p style="color: #E2E8F0; font-size: 1.0rem; line-height: 1.5;">{res['text']}</p>
+            <p style="color: #E2E8F0; font-size: 1.0rem; line-height: 1.5;">{html.escape(res['text'])}</p>
         </div>
         """, unsafe_allow_html=True)
