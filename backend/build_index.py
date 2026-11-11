@@ -38,6 +38,7 @@ def main() -> None:
     source.add_argument("--file", help="Text file with one document per line")
     source.add_argument("--ag-news", type=int, metavar="N", help="Index the first N AG News articles")
     parser.add_argument("--model", default="all-MiniLM-L6-v2")
+    parser.add_argument("--out", default=MODELS_DIR, help="Directory to write the index files to")
     args = parser.parse_args()
 
     if args.ag_news:
@@ -57,12 +58,12 @@ def main() -> None:
     index = faiss.IndexFlatL2(embeddings.shape[1])
     index.add(embeddings)
 
-    os.makedirs(MODELS_DIR, exist_ok=True)
-    faiss.write_index(index, os.path.join(MODELS_DIR, "faiss.index"))
-    np.save(os.path.join(MODELS_DIR, "embeddings.npy"), embeddings)
-    with open(os.path.join(MODELS_DIR, "metadata.pkl"), "wb") as f:
+    os.makedirs(args.out, exist_ok=True)
+    faiss.write_index(index, os.path.join(args.out, "faiss.index"))
+    np.save(os.path.join(args.out, "embeddings.npy"), embeddings)
+    with open(os.path.join(args.out, "metadata.pkl"), "wb") as f:
         pickle.dump(records, f)
-    print(f"Done. {index.ntotal} vectors written to {MODELS_DIR}")
+    print(f"Done. {index.ntotal} vectors written to {args.out}")
 
 
 if __name__ == "__main__":

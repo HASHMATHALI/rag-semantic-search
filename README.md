@@ -1,68 +1,65 @@
-# Embedding-Based Semantic Search System (RAG)
+# Cartograph — search that knows where its map ends
 
-A production-ready Semantic Search engine that converts massive local document datasets into rapidly searchable vector representations (Embeddings) using FAISS. The system completely decouples the heavy indexing process from the serving layer, achieving high scalability with zero GPU dependencies.
+Semantic search always returns *something*. Ask a recipe question of a news archive and you still
+get five confident-looking passages, and a RAG pipeline will happily write an answer from them.
 
-## 🌟 Features
-* **Lightning-Fast Vector Search:** Index up to millions of texts using exact L2-distance FAISS search, fetching matches in < 100 milliseconds locally.
-* **GPU-Free Local Inference:** Utilizes `all-MiniLM-L6-v2`, an incredibly lightweight mathematical embedding model optimized for CPU inference without bottlenecking.
-* **Retrieval-Augmented Generation (RAG):** Includes an integrated Groq API adapter capable of taking raw fetched documents and passing them dynamically into a Llama-3 LLM to synthesize cited natural-language answers.
-* **Beautiful User Interface:** A stunning Streamlit modern frontend tailored for a high-end, premium user experience.
+Cartograph treats that as the main problem. Every query is placed on a map of the indexed corpus
+and given a bearing — **Charted waters**, **Frontier** or **Off the map** — before any passage or
+generated answer is shown. Off-the-map queries are never sent to the LLM.
 
-## 🏗️ Architecture Design
+## What makes it different
 
-```mermaid
-graph TD
-    A[Raw Document Dataset] -->|Batched| B[SentenceTransformers Colab Pipeline]
-    B -->|Offline Generation| C(Embeddings .npy)
-    B -->|Offline Generation| D(FAISS .index)
-    B -->|Offline Generation| E(Metadata .pkl)
-    
-    C --> F[FastAPI Local Server]
-    D --> F
-    E --> F
-    
-    G[Streamlit Frontend] -->|HTTP POST Request| F
-    F -->|Return Top-K matches| H[Retrieved Semantic Documents]
-    H -.->|Optional Context Injection| I[Groq Llama-3 Generator]
-    I -.-> G
-```
+- **Coverage verdict from the corpus itself.** At startup the engine measures how far every
+  passage is from its own nearest neighbour. A query whose best hit is farther away than ~98% of
+  passages are from theirs is off the map. An absolute cosine floor (0.20) backs this up for small
+  corpora. No hand-tuned score threshold per dataset.
+- **A map you can read.** All passages are projected to two dimensions; your query is the coral
+  cross, retrieved passages are numbered, and lines show what was pulled from where.
+- **Two engines, shown separately.** Dense vectors (FAISS, `all-MiniLM-L6-v2`) and BM25 are fused
+  with reciprocal rank fusion. Each result says whether meaning, exact words or both found it.
+- **Evidence sentence.** In multi-sentence passages the sentence closest to the query is highlighted.
+- **Spread control.** Maximal marginal relevance pushes near-duplicates down when you want to see
+  more of the neighbourhood.
+- **Answers that cite or stay silent.** With `GROQ_API_KEY` set, answers must cite passages as
+  `[n]`; cited passages are tagged in the list.
 
-## 🚀 Setup & Execution
-
-### 1. Build the vector index
-The index files are not stored in git. Build them once:
+## Run it
 
 ```bash
-cd backend/
+# 1. build an index (not stored in git)
+cd backend
 pip install -r requirements.txt
-python build_index.py                  # bundled 36-document sample corpus (a few seconds)
-python build_index.py --ag-news 25000  # full AG News demo (needs `pip install datasets`)
-python build_index.py --file docs.txt  # your own corpus, one document per line
-```
+python build_index.py                  # bundled 36-passage sample corpus
+python build_index.py --ag-news 25000  # 25k news articles (needs `pip install datasets`)
+python build_index.py --file docs.txt  # your own corpus, one passage per line
 
-For very large corpora you can instead run the notebook-style pipeline in `colab/` on a free
-Colab instance and copy `faiss.index`, `embeddings.npy` and `metadata.pkl` into `models/`.
+# 2. API
+python -m uvicorn main:app --port 8000       # optional: set GROQ_API_KEY first for answers
 
-### 2. Start the Backend API (FastAPI)
-The backend loads the entire vector database into RAM.
-```bash
-cd backend/
-python -m uvicorn main:app --host 0.0.0.0 --port 8000
-```
-*(Optional RAG)*: Before launching, set your API key environment variable in Powershell:
-`$env:GROQ_API_KEY="gsk_..."`
-
-### 3. Launch the Search Engine UI (Streamlit)
-```bash
-cd frontend/
+# 3. UI (second terminal)
+cd ../frontend
 pip install -r requirements.txt
-python -m streamlit run app.py
+streamlit run app.py                          # BACKEND_URL overrides http://localhost:8000
 ```
-The UI talks to `http://localhost:8000/search` by default; set `BACKEND_URL` to point it elsewhere.
 
-## 🛠️ Technology Stack
-* **Vector DB Engine:** FAISS (`IndexFlatL2`)
-* **Embedding Model:** 🤗 `sentence-transformers/all-MiniLM-L6-v2`
-* **API Framework:** FastAPI, Uvicorn & Pydantic
-* **Frontend:** Streamlit with Custom CSS injection
-* **RAG LLM Engine:** Groq API (Llama-3 Architecture)
+```bash
+cd backend && pip install pytest httpx && pytest -q   # 9 tests, including end-to-end on the sample corpus
+```
+
+## API
+
+| Endpoint | Purpose |
+| :-- | :-- |
+| `POST /search` | `{query, top_k, mode: hybrid\|semantic\|lexical, diversity: 0-1, use_rag}` → results with `found_by`, `evidence`, map coordinates, plus `coverage` and optional cited answer |
+| `GET /map` | Sampled 2-D projection of the corpus |
+| `GET /health` | Vector count and whether answer generation is enabled |
+
+## Limits
+
+The 2-D map keeps only the two strongest directions of a 384-dimensional space, so it is a guide,
+not a measurement. BM25 and the nearest-neighbour baseline are built in memory at startup, which is
+comfortable to roughly 50k passages. The coverage verdict detects "nothing here is about this"; it
+does not check whether a passage is *correct*.
+
+For very large corpora, `colab/` contains the original notebook-style pipeline for building the
+index on a free Colab instance.
